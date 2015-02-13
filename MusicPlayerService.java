@@ -22,15 +22,14 @@ public class MusicPlayerService extends Service implements MediaPlayer.OnPrepare
     private static final String TAG = "MDS_MusicPlayerService";
 
     private static final String ACTION_INIT = "ru.ejik_land.audiostories.action.INIT";
-    private static final String ACTION_PLAY = "ru.ejik_land.audiostories.action.PLAY";
-    private static final String ACTION_PAUSE = "ru.ejik_land.audiostories.action.PAUSE";
-    private static final String ACTION_STOP = "ru.ejik_land.audiostories.action.STOP";
+    private static final String ACTION_PLAY_PAUSE = "ru.ejik_land.audiostories.action.PLAY_PAUSE";
 
     MediaPlayer mMediaPlayer = null;
 
+    private static String mCurrentlyPlayingTrackSrc = "http://tales.verbery.com/audio/dummy_track.mp3";
+
     // set WiFi lock
-    WifiManager.WifiLock wifiLock = ((WifiManager) getSystemService(Context.WIFI_SERVICE))
-            .createWifiLock(WifiManager.WIFI_MODE_FULL, "myLock");
+    WifiManager.WifiLock wifiLock;
 
     @Override
     public IBinder onBind(Intent intent) {
@@ -72,13 +71,12 @@ public class MusicPlayerService extends Service implements MediaPlayer.OnPrepare
         // set wake lock not to lose audio when idle and playing
         mMediaPlayer.setWakeMode(getApplicationContext(), PowerManager.PARTIAL_WAKE_LOCK);
 
+        // set WiFi lock
+       wifiLock = ((WifiManager) getSystemService(Context.WIFI_SERVICE))
+                .createWifiLock(WifiManager.WIFI_MODE_FULL, "myLock");
+
         // set error listener to reset player
         mMediaPlayer.setOnErrorListener(this);
-    }
-
-    public void onMediaRetrieved(String[] tracks) {
-
-
     }
 
     /*
@@ -92,26 +90,57 @@ public class MusicPlayerService extends Service implements MediaPlayer.OnPrepare
             // everything that we need to do is already done in onCreate
             // so we're just relaxing here
 
-        } else if (intent.getAction().equals(ACTION_PLAY)) {
+        } else if (intent.getAction().equals(ACTION_PLAY_PAUSE)) {
 
-            wifiLock.acquire();
+            String src = intent.getDataString();
 
-            // prepare/load new audio track
-//            TODO:
-//            mMediaPlayer.setDataSource(this, Uri.parse(mListOfTracks.get(item).source));
-            mMediaPlayer.setOnPreparedListener(this);
+            try {
+                if(mMediaPlayer.isPlaying()) {
+                    if(src.hashCode() == mCurrentlyPlayingTrackSrc.hashCode()) {
+                        pause();
+                    } else {
+                        // stop currently played track
+                        mMediaPlayer.stop();
+                        // reset Media Player - required
+                        mMediaPlayer.reset();
+                        // prepare/load new audio track
+                        mMediaPlayer.setDataSource(this, Uri.parse(src));
+                        mMediaPlayer.setOnPreparedListener(new MediaPlayer.OnPreparedListener(){
+                            @Override
+                            public void onPrepared(MediaPlayer mp) {
+                                play();
+                            }
+                        });
+                        mMediaPlayer.prepareAsync();
 
-            mMediaPlayer.prepareAsync(); // prepare async to not block main thread
+                        // save current track session id to mCurrentlyPlayingTrack
+                        mCurrentlyPlayingTrackSrc = src;
+                    }
+                } else {
+                    if(src.hashCode() == mCurrentlyPlayingTrackSrc.hashCode()) {
+                        play();
+                    } else {
+                        // reset Media Player - just in case
+                        mMediaPlayer.reset();
+                        // prepare/load new audio track
+                        mMediaPlayer.setDataSource(this, Uri.parse(src));
+                        mMediaPlayer.setOnPreparedListener(new MediaPlayer.OnPreparedListener(){
+                            @Override
+                            public void onPrepared(MediaPlayer mp) {
+                                play();
+                            }
+                        });
+                        mMediaPlayer.prepareAsync();
 
-        } else if (intent.getAction().equals(ACTION_PAUSE)) {
-
-            wifiLock.release();
-
-
-        } else if (intent.getAction().equals(ACTION_STOP)) {
-
-            wifiLock.release();
-            stopSelf();
+                        // save current track session id to mCurrentlyPlayingTrack
+                        mCurrentlyPlayingTrackSrc = src;
+                    }
+                }
+            } catch (IOException e) {
+                Log.v(TAG, e.getMessage());
+            } catch (IllegalArgumentException e) {
+                Log.v(TAG, e.getMessage());
+            }
 
         } else {
 
@@ -121,6 +150,18 @@ public class MusicPlayerService extends Service implements MediaPlayer.OnPrepare
         // We want this service to continue running until it is explicitly
         // stopped, so return sticky.
         return START_STICKY;
+    }
+
+    // what should we do on play request
+    private void play() {
+        wifiLock.acquire();
+        mMediaPlayer.start();
+    }
+
+    // what should we do on pause request
+    private void pause() {
+        wifiLock.release();
+        mMediaPlayer.pause();
     }
 
     /*
@@ -144,7 +185,7 @@ public class MusicPlayerService extends Service implements MediaPlayer.OnPrepare
 
         if (!mMediaPlayer.isPlaying()) {
             Log.d(TAG, "configAndStartMediaPlayer startMediaPlayer.");
-            mMediaPlayer.start();
+            play();
         }
     }
 
