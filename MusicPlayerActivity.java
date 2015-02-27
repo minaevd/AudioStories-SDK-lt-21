@@ -1,33 +1,18 @@
 package ru.ejik_land.audiostories;
 
 import android.app.ListActivity;
-import android.app.PendingIntent;
-import android.content.Context;
 import android.content.Intent;
-import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.net.Uri;
-import android.os.AsyncTask;
 import android.os.Bundle;
-import android.os.PowerManager;
 import android.util.Log;
 import android.view.View;
 import android.widget.ArrayAdapter;
+import android.widget.ImageView;
 import android.widget.ListView;
+import android.widget.TextView;
 
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-
-import java.io.BufferedInputStream;
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.UnsupportedEncodingException;
-import java.net.URLConnection;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.List;
 
 import ru.ejik_land.audiostories.model.MusicProvider;
 import ru.ejik_land.audiostories.utils.MediaAttrs;
@@ -43,12 +28,20 @@ public class MusicPlayerActivity extends ListActivity {
     Intent mPlaybackServiceIntent;
     MusicProvider mMusicProvider;
 
+    boolean album_or_track = true; // true - album, false - track
+    String mCurrAlbum = "NONE";
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
 
         super.onCreate(savedInstanceState);
+        setContentView(R.layout.albums);
 
         Log.d(TAG, "Started activity: MainActivity, onCreate");
+
+        // show loading text
+        TextView loadingHolder = (TextView) this.findViewById(R.id.loadingHolder);
+        loadingHolder.setVisibility(View.VISIBLE);
 
         // fetch all the tracks and albums from the music.json
         // file on a remote server
@@ -73,10 +66,19 @@ public class MusicPlayerActivity extends ListActivity {
 
     public void mediaRetrieved() {
 
-        String[] tracks = mMusicProvider.getTrackIds();
+        String[] titles = mMusicProvider.getAlbums();
+        String[] subtitles = mMusicProvider.getSubTitles();
+        String[] icons = mMusicProvider.getIcons();
 
-        ArrayAdapter<String> adapter = new ArrayAdapter<String>(this,
-                android.R.layout.simple_list_item_1, tracks);
+        album_or_track = true;
+
+        // hide loading text
+        TextView loadingHolder = (TextView) this.findViewById(R.id.loadingHolder);
+        loadingHolder.setVisibility(View.GONE);
+
+        AlbumAdapter adapter = new AlbumAdapter(this, titles);
+        adapter.setSubTitles(subtitles);
+        adapter.setIcons(icons);
         setListAdapter(adapter);
     }
 
@@ -84,10 +86,47 @@ public class MusicPlayerActivity extends ListActivity {
     protected void onListItemClick(ListView l, View v, int position, long id){
 
         String item = (String) getListAdapter().getItem(position);
-        Map<String, MediaAttrs> mListOfTracks = mMusicProvider.getListOfTracks();
 
-        mPlaybackServiceIntent.setAction(ACTION_PLAY_PAUSE);
-        mPlaybackServiceIntent.setData(Uri.parse(mListOfTracks.get(item).source));
-        startService(mPlaybackServiceIntent);
+        if(album_or_track) {
+            // user clicked on album
+
+            // set title
+            TextView headerTitle = (TextView) this.findViewById(R.id.headerTitle);
+            headerTitle.setText(item);
+
+            // set subtitle
+            TextView headerSubTitle = (TextView) this.findViewById(R.id.headerSubTitle);
+            headerSubTitle.setText("Читает " + mMusicProvider.getArtistByAlbum(item));
+            headerSubTitle.setVisibility(View.VISIBLE);
+
+            // set header splitter line
+            ImageView headerSplitter = (ImageView) this.findViewById(R.id.headerSplitter);
+            headerSplitter.setImageResource(R.drawable.line2);
+
+            List<MediaAttrs> tracks = mMusicProvider.getListOfTracksByAlbum(item);
+
+            int i=0;
+            String[] trackIds = new String[tracks.size()];
+            for (MediaAttrs track: tracks) {
+                trackIds[i++] = track.title;
+            }
+
+            // save current album
+            mCurrAlbum = item;
+
+            TrackAdapter adapter = new TrackAdapter(this, trackIds);
+            setListAdapter(adapter);
+
+            album_or_track = false;
+
+        } else {
+            // user clicked on audio track
+
+            String src = mMusicProvider.getTrackSourceByTitle(item);
+
+            mPlaybackServiceIntent.setAction(ACTION_PLAY_PAUSE);
+            mPlaybackServiceIntent.setData(Uri.parse(src));
+            startService(mPlaybackServiceIntent);
+        }
     }
 }

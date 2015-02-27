@@ -1,7 +1,9 @@
 package ru.ejik_land.audiostories.model;
 
 import android.os.AsyncTask;
+import android.provider.MediaStore;
 import android.util.Log;
+import android.widget.ArrayAdapter;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -14,7 +16,9 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.UnsupportedEncodingException;
 import java.net.URLConnection;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import ru.ejik_land.audiostories.utils.MediaAttrs;
@@ -32,7 +36,11 @@ public class MusicProvider { // extends AsyncTask<String, Void, String> {
     private static final String CATALOG_URL = "http://tales.verbery.com/audio/music.json";
 
     Map<String, MediaAttrs> mListOfTracks = new HashMap<String, MediaAttrs>();
-    String[] mTrackIds;
+    private String[] mTrackIds;
+    HashMap<String, List<MediaAttrs>> mListOfAlbums = new HashMap<String, List<MediaAttrs>>();
+    private String[] mAlbums;
+    private String[] mSubTitles;
+    private String[] mIcons;
 
     enum State {
         NON_INITIALIZED, INITIALIZING, INITIALIZED
@@ -56,8 +64,32 @@ public class MusicProvider { // extends AsyncTask<String, Void, String> {
         return mListOfTracks;
     }
 
+    public List<MediaAttrs> getListOfTracksByAlbum(String album) {
+        return mListOfAlbums.get(album);
+    }
+
+    public String getTrackSourceByTitle(String title) {
+        return mListOfTracks.get(title).source;
+    }
+
     public String[] getTrackIds() {
         return mTrackIds;
+    }
+
+    public String[] getAlbums() {
+        return mAlbums;
+    }
+
+    public String[] getSubTitles() {
+        return mSubTitles;
+    }
+
+    public String[] getIcons() {
+        return mIcons;
+    }
+
+    public String getArtistByAlbum(String album) {
+        return mListOfAlbums.get(album).get(0).artist;
     }
 
     public interface Callback {
@@ -92,29 +124,6 @@ public class MusicProvider { // extends AsyncTask<String, Void, String> {
             }
         }.execute();
     }
-
-//    @Override
-//    protected String doInBackground(String... urls) {
-//
-//        for (String url: urls) {
-//
-//            retrieveMediaAsync(url);
-//        }
-//        return "executed";
-//    }
-
-//    @Override
-//    protected void onPostExecute(String result) {
-//
-//        int i=0;
-//        mTrackIds = new String[mListOfTracks.size()];
-//        for (MediaAttrs value : mListOfTracks.values()) {
-//            mTrackIds[i++] = value.title;
-//        }
-//
-////        onMediaRetrieved(mTrackIds);
-////        return mTrackIds;
-//    }
 
     private void retrieveMediaAsync() {
 
@@ -180,17 +189,33 @@ public class MusicProvider { // extends AsyncTask<String, Void, String> {
                         currTrack.id = id;
 
                         mListOfTracks.put(title, currTrack);
+                        mListOfAlbums.put(album, new ArrayList<MediaAttrs>());
 
                         Log.d(TAG, "Found music track: " + json);
                     }
                 }
 
                 // create a fixed size array of track ids
-                // to create an ArrayAdapter in the main activity
                 int i=0;
                 mTrackIds = new String[mListOfTracks.size()];
                 for (MediaAttrs value : mListOfTracks.values()) {
-                    mTrackIds[i++] = value.title;
+                    mTrackIds[i] = value.title;
+                    mListOfAlbums.get(value.album).add(value);
+                    i++;
+                }
+
+                // create a fixed size array of albums
+                i=0;
+
+                mAlbums = new String[mListOfAlbums.size()];
+                mSubTitles = new String[mListOfAlbums.size()];
+                mIcons = new String[mListOfAlbums.size()];
+
+                for (String album: mListOfAlbums.keySet()) {
+                    mAlbums[i] = album;
+                    mSubTitles[i] = mListOfAlbums.get(album).get(0).artist;
+                    mIcons[i] = mListOfAlbums.get(album).get(0).image;
+                    i++;
                 }
 
                 mCurrentState = State.INITIALIZED;
